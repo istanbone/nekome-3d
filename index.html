@@ -207,7 +207,7 @@ canvas:active { cursor: grabbing; }
 .musicbtn[aria-pressed="true"] .disc svg { animation: bob 1.6s ease-in-out infinite; }
 @keyframes bob { 0%,100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-2px) rotate(-6deg); } }
 @media (prefers-reduced-motion: reduce) { .musicbtn[aria-pressed="true"] .disc svg { animation: none; } }
-.sidebtns { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(100% - 64px); display: flex; flex-direction: column; gap: 12px; }
+.sidebtns { position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(100% - 64px); display: flex; flex-direction: column; gap: 12px; }
 .sidebtns .shopbtn { position: static; }
 .bookbtn { top: calc(96px + env(safe-area-inset-top, 0px)); }
 .bookbtn .disc svg { width: 26px; height: 26px; fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
