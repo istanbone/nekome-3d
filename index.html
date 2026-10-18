@@ -1,0 +1,876 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>バーの3Dスキャン</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one-screen tool. Slim toolbar on top, full-bleed 3D stage below, small floating help card. */
+:root {
+  --bg: #f3f4f6;
+  --panel: #ffffff;
+  --fg: #1c2230;
+  --muted: #5d6677;
+  --line: #d7dbe3;
+  --accent: #2b62c9;
+  --accent-fg: #ffffff;
+  --stage: #0b0a09;
+  --danger: #b3261e;
+  --font-ui: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151b; --panel: #1a1f27; --fg: #e6e9ef; --muted: #98a1b2; --line: #2c3340;
+    --accent: #7ea6ff; --accent-fg: #0d1526; --stage: #0b0a09; --danger: #ff8a80; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151b; --panel: #1a1f27; --fg: #e6e9ef; --muted: #98a1b2; --line: #2c3340;
+  --accent: #7ea6ff; --accent-fg: #0d1526; --stage: #0b0a09; --danger: #ff8a80; color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 14px; overflow: hidden; }
+.app { height: 100%; display: grid; grid-template-rows: auto 1fr; }
+.bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  padding-block: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 700; font-size: 15px; letter-spacing: .02em; margin-right: 4px; }
+.group { display: flex; flex-wrap: wrap; gap: 6px; }
+button, .filebtn {
+  font: inherit; font-size: 13px; color: var(--fg); background: transparent;
+  border: 1px solid var(--line); border-radius: 6px; padding: 6px 11px; cursor: pointer; line-height: 1.2;
+}
+button:hover, .filebtn:hover { border-color: var(--muted); }
+button:focus-visible, .filebtn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--fg); color: var(--panel); border-color: var(--fg); }
+.filebtn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 700; }
+.filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.filebtn { position: relative; display: inline-flex; align-items: center; }
+.stats { margin-left: auto; display: flex; flex-wrap: wrap; gap: 4px 12px; font-family: var(--font-data); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 0; }
+.stats b { color: var(--fg); font-weight: 500; }
+.tag { font-family: var(--font-ui); font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; color: var(--muted); }
+.stage { position: relative; background: var(--stage); min-height: 0; overflow: hidden; touch-action: none; }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+canvas:active { cursor: grabbing; }
+.help {
+  position: absolute; left: max(12px, env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  max-width: min(330px, calc(100% - 24px)); background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 12px; font-size: 12px; line-height: 1.65; color: var(--muted);
+}
+.help h2 { font-size: 12px; margin: 0 0 4px; color: var(--fg); font-weight: 700; letter-spacing: .04em; }
+.help dl { display: grid; grid-template-columns: auto 1fr; gap: 0 10px; margin: 0; }
+.help dt { font-family: var(--font-data); color: var(--fg); }
+.help dd { margin: 0; }
+.help p { margin: 6px 0 0; }
+.help .close { position: absolute; top: 4px; right: 6px; border: 0; padding: 4px 6px; color: var(--muted); }
+.drop {
+  position: absolute; inset: 12px; border: 2px dashed var(--accent); border-radius: 12px;
+  display: grid; place-items: center; background: color-mix(in srgb, var(--stage) 80%, transparent);
+  font-size: 16px; font-weight: 700; color: var(--fg); pointer-events: none;
+}
+.status {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 32px);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-size: 13px;
+}
+.status.err { color: var(--danger); border-color: var(--danger); }
+@media (max-width: 560px) { .stats { margin-left: 0; width: 100%; } .help dl .desk { display: none; } }
+@media (hover: none) { .desk { display: none; } }
+@media (hover: hover) { .touch { display: none; } }
+</style>
+
+<div class="app">
+  <header class="bar">
+    <span class="brand">バーの3Dスキャン</span>
+    <label class="filebtn" for="file" hidden>別のファイルを開く<input id="file" type="file" accept=".spz,.ply,.splat"></label>
+    <div class="group">
+      <button id="tourBtn" type="button" aria-pressed="false">カメラワーク</button>
+    </div>
+    <div class="group" role="group" aria-label="視点">
+      <button id="inside" type="button" aria-pressed="true">中から見る</button>
+      <button id="outside" type="button" aria-pressed="false">全体を見る</button>
+    </div>
+    <div class="group" role="group" aria-label="データ" hidden>
+      <button id="vOrig" type="button" aria-pressed="true">元データ＋補完</button>
+      <button id="vPhoto" type="button" aria-pressed="false">強め補正</button>
+      <button id="vRaw" type="button" aria-pressed="false">元データ</button>
+    </div>
+    <div class="group">
+      <button id="flip" type="button" aria-pressed="false" hidden>上下反転</button>
+      <button id="reset" type="button">視点リセット</button>
+    </div>
+    <div class="stats" aria-live="polite">
+      <span id="name"><b>読み込み中…</b></span>
+      <span>点数 <b id="count">0</b></span>
+      <span>形式 <b id="fmt">-</b></span>
+      <span id="sampleTag" class="tag" hidden>サンプル（自動生成）</span>
+    </div>
+  </header>
+  <main class="stage" id="stage">
+    <canvas id="gl" aria-label="3Dスプラット表示"></canvas>
+    <div class="drop" id="drop" hidden>SPZ / PLY をここにドロップ</div>
+    <div class="status" id="status" hidden></div>
+    <aside class="help" id="help">
+      <button class="close" id="closeHelp" type="button" aria-label="操作ガイドを閉じる">×</button>
+      <h2>操作</h2>
+      <dl>
+        <dt class="desk">ドラッグ</dt><dd class="desk">回転・見回す</dd>
+        <dt class="desk">右ドラッグ</dt><dd class="desk">平行移動（Shift＋ドラッグでも可）</dd>
+        <dt class="desk">ホイール</dt><dd class="desk">ズーム・前進</dd>
+        <dt class="desk">W A S D</dt><dd class="desk">歩く　Q / E で上下</dd>
+        <dt class="touch">1本指</dt><dd class="touch">回転・見回す</dd>
+        <dt class="touch">2本指</dt><dd class="touch">ピンチでズーム、ずらして移動</dd>
+      </dl>
+      <p>バーの店内を3Dスキャンしたものです。アプリのインストールは不要で、ブラウザだけで見られます。床やカウンター前面など撮影で写らなかった部分は、店内写真をもとに補っています。</p>
+      <p>開くとカメラワークが自動で流れます。画面に触れると止まり、自由に動かせます。「カメラワーク再生」でもう一度流せます。</p>
+    </aside>
+  </main>
+</div>
+
+<script>
+"use strict";
+const SH_C0 = 0.28209479177387814;
+const FOV = 60 * Math.PI / 180;
+
+/* ---------- sorting (shared by worker and fallback) ---------- */
+function sortSplats(pos, n, v) {
+  const sizeList = new Int32Array(n);
+  let maxD = -Infinity, minD = Infinity;
+  const a = v[2], b = v[6], c = v[10];
+  for (let i = 0; i < n; i++) {
+    const d = ((a * pos[3 * i] + b * pos[3 * i + 1] + c * pos[3 * i + 2]) * 4096) | 0;
+    sizeList[i] = d;
+    if (d > maxD) maxD = d;
+    if (d < minD) minD = d;
+  }
+  const inv = 65535 / ((maxD - minD) || 1);
+  const counts = new Uint32Array(65536);
+  for (let i = 0; i < n; i++) { const k = ((sizeList[i] - minD) * inv) | 0; sizeList[i] = k; counts[k]++; }
+  const starts = new Uint32Array(65536);
+  for (let i = 1; i < 65536; i++) starts[i] = starts[i - 1] + counts[i - 1];
+  const out = new Uint32Array(n);
+  for (let i = 0; i < n; i++) out[starts[sizeList[i]]++] = i;
+  return out;
+}
+function workerMain() {
+  let pos = null, n = 0, id = 0, last = null;
+  self.onmessage = (e) => {
+    const m = e.data;
+    if (m.pos) { pos = m.pos; n = pos.length / 3; id = m.id; last = null; }
+    if (m.view && pos) {
+      const v = m.view;
+      if (last && Math.abs(last[0] - v[2]) < 0.002 && Math.abs(last[1] - v[6]) < 0.002 && Math.abs(last[2] - v[10]) < 0.002) return;
+      last = [v[2], v[6], v[10]];
+      const idx = sortSplats(pos, n, v);
+      self.postMessage({ index: idx, id }, [idx.buffer]);
+    }
+  };
+}
+
+/* ---------- half float ---------- */
+const _f = new Float32Array(1), _i = new Int32Array(_f.buffer);
+function floatToHalf(x) {
+  _f[0] = x; const f = _i[0];
+  const sign = (f >> 31) & 1, exp = (f >> 23) & 0xff;
+  let frac = f & 0x7fffff, e;
+  if (exp === 0) e = 0;
+  else if (exp < 113) { e = 0; frac |= 0x800000; frac = frac >> (113 - exp); if (frac & 0x1000000) { e = 1; frac = 0; } }
+  else if (exp < 142) e = exp - 112;
+  else { e = 31; frac = 0; }
+  return (sign << 15) | (e << 10) | (frac >> 13);
+}
+function packHalf2x16(x, y) { return (floatToHalf(x) | (floatToHalf(y) << 16)) >>> 0; }
+function halfToFloat(h) {
+  const s = (h & 0x8000) ? -1 : 1, e = (h >> 10) & 0x1f, m = h & 0x3ff;
+  if (e === 0) return s * Math.pow(2, -14) * (m / 1024);
+  if (e === 31) return m ? NaN : s * Infinity;
+  return s * Math.pow(2, e - 15) * (1 + m / 1024);
+}
+
+/* ---------- common splat data ---------- */
+function makeData(n) {
+  return { n, pos: new Float32Array(3 * n), scl: new Float32Array(3 * n), rot: new Float32Array(4 * n), rgba: new Uint8ClampedArray(4 * n), rub: false };
+}
+
+/* ---------- parsers ---------- */
+async function parseSPZ(buf) {
+  let bytes = new Uint8Array(buf);
+  if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+    if (typeof DecompressionStream === "undefined") throw new Error("このブラウザはSPZの展開に対応していません。最新のChrome・Edge・Safari・Firefoxで開いてください。");
+    const stream = new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"));
+    bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (dv.getUint32(0, true) !== 0x5053474e) throw new Error("SPZファイルとして読み込めませんでした。ファイルが壊れていないか確認してください。");
+  const version = dv.getUint32(4, true), n = dv.getUint32(8, true), frac = bytes[13];
+  const d = makeData(n); d.rub = true;
+  let o = 16;
+  if (version === 1) {
+    for (let i = 0; i < 3 * n; i++) d.pos[i] = halfToFloat(dv.getUint16(o + 2 * i, true));
+    o += 6 * n;
+  } else {
+    const sc = 1 / (1 << frac);
+    for (let i = 0; i < 3 * n; i++) {
+      const p = o + 3 * i;
+      let v = bytes[p] | (bytes[p + 1] << 8) | (bytes[p + 2] << 16);
+      if (v & 0x800000) v |= 0xff000000;
+      d.pos[i] = (v | 0) * sc;
+    }
+    o += 9 * n;
+  }
+  for (let i = 0; i < n; i++) d.rgba[4 * i + 3] = bytes[o + i];
+  o += n;
+  for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) {
+    const dc = (bytes[o + 3 * i + k] / 255 - 0.5) / 0.15;
+    d.rgba[4 * i + k] = (0.5 + SH_C0 * dc) * 255;
+  }
+  o += 3 * n;
+  for (let i = 0; i < 3 * n; i++) d.scl[i] = Math.exp(bytes[o + i] / 16 - 10);
+  o += 3 * n;
+  if (version >= 3) {
+    const mask = 511, r = Math.SQRT1_2, q = [0, 0, 0, 0];
+    for (let i = 0; i < n; i++) {
+      let comp = dv.getUint32(o + 4 * i, true);
+      const big = comp >>> 30; let ss = 0;
+      for (let k = 3; k >= 0; k--) {
+        if (k === big) continue;
+        const mag = comp & mask, neg = (comp >>> 9) & 1;
+        comp = comp >>> 10;
+        q[k] = r * mag / mask * (neg ? -1 : 1);
+        ss += q[k] * q[k];
+      }
+      q[big] = Math.sqrt(Math.max(0, 1 - ss));
+      d.rot[4 * i] = q[3]; d.rot[4 * i + 1] = q[0]; d.rot[4 * i + 2] = q[1]; d.rot[4 * i + 3] = q[2];
+    }
+  } else {
+    for (let i = 0; i < n; i++) {
+      const x = bytes[o + 3 * i] / 127.5 - 1, y = bytes[o + 3 * i + 1] / 127.5 - 1, z = bytes[o + 3 * i + 2] / 127.5 - 1;
+      d.rot[4 * i] = Math.sqrt(Math.max(0, 1 - x * x - y * y - z * z));
+      d.rot[4 * i + 1] = x; d.rot[4 * i + 2] = y; d.rot[4 * i + 3] = z;
+    }
+  }
+  return d;
+}
+
+const PLY_TYPES = { char: 1, int8: 1, uchar: 1, uint8: 1, short: 2, int16: 2, ushort: 2, uint16: 2, int: 4, int32: 4, uint: 4, uint32: 4, float: 4, float32: 4, double: 8, float64: 8 };
+function plyReader(dv, type) {
+  switch (type) {
+    case "char": case "int8": return (o) => dv.getInt8(o);
+    case "uchar": case "uint8": return (o) => dv.getUint8(o);
+    case "short": case "int16": return (o) => dv.getInt16(o, true);
+    case "ushort": case "uint16": return (o) => dv.getUint16(o, true);
+    case "int": case "int32": return (o) => dv.getInt32(o, true);
+    case "uint": case "uint32": return (o) => dv.getUint32(o, true);
+    case "double": case "float64": return (o) => dv.getFloat64(o, true);
+    default: return (o) => dv.getFloat32(o, true);
+  }
+}
+function parsePLY(buf) {
+  const bytes = new Uint8Array(buf);
+  const head = new TextDecoder().decode(bytes.subarray(0, Math.min(bytes.length, 65536)));
+  const at = head.indexOf("end_header");
+  if (at < 0) throw new Error("PLYのヘッダーが見つかりませんでした。");
+  let start = at + 10;
+  while (start < bytes.length && bytes[start] !== 10) start++;
+  start++;
+  const lines = head.slice(0, at).split(/\r?\n/);
+  if (!lines.some(l => l.startsWith("format binary_little_endian"))) throw new Error("このPLYは対応外の形式です（binary little endian のみ対応）。");
+  const elements = [];
+  for (const line of lines) {
+    const t = line.trim().split(/\s+/);
+    if (t[0] === "element") elements.push({ name: t[1], count: +t[2], props: [], size: 0 });
+    else if (t[0] === "property" && elements.length) {
+      const el = elements[elements.length - 1];
+      if (t[1] === "list") { el.list = true; continue; }
+      el.props.push({ name: t[2], type: t[1], off: el.size });
+      el.size += PLY_TYPES[t[1]] || 4;
+    }
+  }
+  if (elements.some(e => e.name === "chunk")) throw new Error("圧縮PLY（SuperSplat形式）には未対応です。通常のPLYかSPZで書き出してください。");
+  let offset = start, vert = null;
+  for (const el of elements) {
+    if (el.name === "vertex") { vert = el; break; }
+    if (el.list) throw new Error("このPLYの構造には未対応です。");
+    offset += el.size * el.count;
+  }
+  if (!vert || vert.list) throw new Error("PLYに頂点データがありません。");
+  const dv = new DataView(buf);
+  const P = {}; for (const p of vert.props) P[p.name] = { off: p.off, get: plyReader(dv, p.type), type: p.type };
+  if (!P.x || !P.y || !P.z) throw new Error("PLYに位置データ（x, y, z）がありません。");
+  const n = vert.count, s = vert.size, d = makeData(n);
+  const hasDC = P.f_dc_0 && P.f_dc_1 && P.f_dc_2, hasRGB = P.red && P.green && P.blue;
+  const hasScale = P.scale_0 && P.scale_1 && P.scale_2, hasRot = P.rot_0 && P.rot_1 && P.rot_2 && P.rot_3;
+  const rgbScale = hasRGB && (P.red.type === "uchar" || P.red.type === "uint8") ? 1 : 255;
+  for (let i = 0; i < n; i++) {
+    const b = offset + i * s;
+    d.pos[3 * i] = P.x.get(b + P.x.off); d.pos[3 * i + 1] = P.y.get(b + P.y.off); d.pos[3 * i + 2] = P.z.get(b + P.z.off);
+    if (hasDC) {
+      d.rgba[4 * i] = (0.5 + SH_C0 * P.f_dc_0.get(b + P.f_dc_0.off)) * 255;
+      d.rgba[4 * i + 1] = (0.5 + SH_C0 * P.f_dc_1.get(b + P.f_dc_1.off)) * 255;
+      d.rgba[4 * i + 2] = (0.5 + SH_C0 * P.f_dc_2.get(b + P.f_dc_2.off)) * 255;
+    } else if (hasRGB) {
+      d.rgba[4 * i] = P.red.get(b + P.red.off) * rgbScale; d.rgba[4 * i + 1] = P.green.get(b + P.green.off) * rgbScale; d.rgba[4 * i + 2] = P.blue.get(b + P.blue.off) * rgbScale;
+    } else { d.rgba[4 * i] = d.rgba[4 * i + 1] = d.rgba[4 * i + 2] = 200; }
+    d.rgba[4 * i + 3] = P.opacity ? 255 / (1 + Math.exp(-P.opacity.get(b + P.opacity.off))) : 255;
+    if (hasScale) {
+      d.scl[3 * i] = Math.exp(P.scale_0.get(b + P.scale_0.off)); d.scl[3 * i + 1] = Math.exp(P.scale_1.get(b + P.scale_1.off)); d.scl[3 * i + 2] = Math.exp(P.scale_2.get(b + P.scale_2.off));
+    } else { d.scl[3 * i] = d.scl[3 * i + 1] = d.scl[3 * i + 2] = -1; }
+    if (hasRot) {
+      d.rot[4 * i] = P.rot_0.get(b + P.rot_0.off); d.rot[4 * i + 1] = P.rot_1.get(b + P.rot_1.off); d.rot[4 * i + 2] = P.rot_2.get(b + P.rot_2.off); d.rot[4 * i + 3] = P.rot_3.get(b + P.rot_3.off);
+    } else d.rot[4 * i] = 1;
+  }
+  if (!hasScale) { // plain point cloud: give every point a small round footprint
+    const ext = measure(d.pos, n).extent, r = ext * 0.003;
+    d.scl.fill(r);
+  }
+  return d;
+}
+
+function parseSplat(buf) {
+  const n = Math.floor(buf.byteLength / 32), f = new Float32Array(buf, 0, n * 8), u = new Uint8Array(buf), d = makeData(n);
+  for (let i = 0; i < n; i++) {
+    d.pos[3 * i] = f[8 * i]; d.pos[3 * i + 1] = f[8 * i + 1]; d.pos[3 * i + 2] = f[8 * i + 2];
+    d.scl[3 * i] = f[8 * i + 3]; d.scl[3 * i + 1] = f[8 * i + 4]; d.scl[3 * i + 2] = f[8 * i + 5];
+    for (let k = 0; k < 4; k++) { d.rgba[4 * i + k] = u[32 * i + 24 + k]; d.rot[4 * i + k] = (u[32 * i + 28 + k] - 128) / 128; }
+  }
+  return d;
+}
+
+/* ---------- sample scene (procedural room, y points down) ---------- */
+function makeSample() {
+  let seed = 7; const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const items = [];
+  const add = (x, y, z, sx, sy, sz, r, g, b, a = 235) => items.push([x, y, z, sx, sy, sz, r, g, b, a]);
+  const S = 3, step = 0.05;
+  for (let x = -S; x <= S; x += step) for (let z = -S; z <= S; z += step) {           // wooden floor planks
+    const plank = Math.floor((z + S) / 0.3) % 2, j = (rnd() - 0.5) * 18;
+    add(x + (rnd() - .5) * .02, 1, z + (rnd() - .5) * .02, .035, .004, .035, 168 + plank * 18 + j, 128 + plank * 12 + j, 88 + j);
+  }
+  for (let t = -S; t <= S; t += step) for (let y = -1.2; y <= 1; y += step) {         // three walls
+    const j = (rnd() - 0.5) * 10;
+    add(t, y, S, .035, .035, .004, 226 + j, 222 + j, 212 + j);
+    add(-S, y, t, .004, .035, .035, 214 + j, 220 + j, 226 + j);
+    add(S, y, t, .004, .035, .035, 214 + j, 220 + j, 226 + j);
+  }
+  for (let x = -1.2; x <= 1.2; x += .03) for (let z = 1.6; z <= 2.5; z += .03) {       // sofa seat
+    add(x, 0.55 + (rnd() - .5) * .02, z, .025, .012, .025, 52, 92, 132);
+  }
+  for (let x = -1.2; x <= 1.2; x += .03) for (let y = -0.2; y <= 0.55; y += .03) add(x, y, 2.5, .025, .025, .012, 46, 82, 120);
+  for (let i = 0; i < 9000; i++) {                                                    // round ottoman
+    const u = rnd() * 2 - 1, th = rnd() * Math.PI * 2, rr = Math.sqrt(1 - u * u);
+    const nx = rr * Math.cos(th), ny = u, nz = rr * Math.sin(th);
+    if (ny > 0.6) continue;
+    add(1.6 + nx * .45, 0.55 + ny * .45, -0.4 + nz * .45, .03, .03, .03, 214, 120 + ny * 30, 62);
+  }
+  for (let x = -0.9; x <= 0.9; x += .025) for (let z = -0.6; z <= 0.6; z += .025) add(x - .6, 0.3, z, .02, .006, .02, 236, 236, 232); // low table top
+  for (let i = 0; i < 4; i++) { const lx = -1.4 + (i % 2) * 1.6, lz = -0.5 + (i >> 1) * 1.0; for (let y = 0.32; y < 1; y += .025) add(lx, y, lz, .02, .02, .02, 70, 60, 50); }
+  const n = items.length, d = makeData(n);
+  items.forEach((it, i) => {
+    d.pos.set(it.slice(0, 3), 3 * i); d.scl.set(it.slice(3, 6), 3 * i);
+    d.rgba[4 * i] = it[6]; d.rgba[4 * i + 1] = it[7]; d.rgba[4 * i + 2] = it[8]; d.rgba[4 * i + 3] = it[9];
+    d.rot[4 * i] = 1;
+  });
+  return d;
+}
+
+/* ---------- packing into GPU texture ---------- */
+function pack(d, flip) {
+  const n = d.n, texW = 2048, texH = Math.max(1, Math.ceil((2 * n) / texW));
+  const tex = new Uint32Array(texW * texH * 4), texF = new Float32Array(tex.buffer), texC = new Uint8Array(tex.buffer);
+  const pos = new Float32Array(3 * n), sg = flip ? -1 : 1;
+  for (let j = 0; j < n; j++) {
+    const x = d.pos[3 * j], y = d.pos[3 * j + 1] * sg, z = d.pos[3 * j + 2] * sg;
+    pos[3 * j] = x; pos[3 * j + 1] = y; pos[3 * j + 2] = z;
+    texF[8 * j] = x; texF[8 * j + 1] = y; texF[8 * j + 2] = z;
+    texC[4 * (8 * j + 7)] = d.rgba[4 * j]; texC[4 * (8 * j + 7) + 1] = d.rgba[4 * j + 1];
+    texC[4 * (8 * j + 7) + 2] = d.rgba[4 * j + 2]; texC[4 * (8 * j + 7) + 3] = d.rgba[4 * j + 3];
+    let w = d.rot[4 * j], qx = d.rot[4 * j + 1], qy = d.rot[4 * j + 2], qz = d.rot[4 * j + 3];
+    const len = Math.hypot(w, qx, qy, qz) || 1; w /= len; qx /= len; qy /= len; qz /= len;
+    const s0 = d.scl[3 * j], s1 = d.scl[3 * j + 1], s2 = d.scl[3 * j + 2];
+    const M = [
+      (1 - 2 * (qy * qy + qz * qz)) * s0, 2 * (qx * qy + w * qz) * s0, 2 * (qx * qz - w * qy) * s0,
+      2 * (qx * qy - w * qz) * s1, (1 - 2 * (qx * qx + qz * qz)) * s1, 2 * (qy * qz + w * qx) * s1,
+      2 * (qx * qz + w * qy) * s2, 2 * (qy * qz - w * qx) * s2, (1 - 2 * (qx * qx + qy * qy)) * s2,
+    ];
+    let xx = M[0] * M[0] + M[3] * M[3] + M[6] * M[6], xy = M[0] * M[1] + M[3] * M[4] + M[6] * M[7],
+        xz = M[0] * M[2] + M[3] * M[5] + M[6] * M[8], yy = M[1] * M[1] + M[4] * M[4] + M[7] * M[7],
+        yz = M[1] * M[2] + M[4] * M[5] + M[7] * M[8], zz = M[2] * M[2] + M[5] * M[5] + M[8] * M[8];
+    if (flip) { xy = -xy; xz = -xz; }
+    tex[8 * j + 4] = packHalf2x16(4 * xx, 4 * xy);
+    tex[8 * j + 5] = packHalf2x16(4 * xz, 4 * yy);
+    tex[8 * j + 6] = packHalf2x16(4 * yz, 4 * zz);
+  }
+  return { tex, texW, texH, pos };
+}
+
+function measure(pos, n) {
+  const step = Math.max(1, Math.floor(n / 20000)), ax = [[], [], []];
+  for (let i = 0; i < n; i += step) for (let k = 0; k < 3; k++) { const v = pos[3 * i + k]; if (isFinite(v)) ax[k].push(v); }
+  const center = [0, 0, 0]; let extent = 0;
+  for (let k = 0; k < 3; k++) {
+    const a = ax[k].sort((p, q) => p - q); if (!a.length) continue;
+    const q = (t) => a[Math.min(a.length - 1, Math.floor(t * a.length))];
+    center[k] = q(0.5); extent = Math.max(extent, q(0.95) - q(0.05));
+  }
+  return { center, extent: extent || 1 };
+}
+
+/* ---------- WebGL ---------- */
+const canvas = document.getElementById("gl");
+const gl = canvas.getContext("webgl2", { antialias: false, premultipliedAlpha: true, alpha: true });
+const statusEl = document.getElementById("status");
+function showStatus(msg, err) { statusEl.textContent = msg; statusEl.classList.toggle("err", !!err); statusEl.hidden = !msg; }
+
+const VS = `#version 300 es
+precision highp float; precision highp int;
+uniform highp usampler2D u_texture;
+uniform mat4 projection, view;
+uniform vec2 focal, viewport;
+in vec2 position; in int index;
+out vec4 vColor; out vec2 vPosition;
+void main () {
+  uvec4 cen = texelFetch(u_texture, ivec2((uint(index) & 0x3ffu) << 1, uint(index) >> 10), 0);
+  vec4 cam = view * vec4(uintBitsToFloat(cen.xyz), 1);
+  vec4 pos2d = projection * cam;
+  float clip = 1.2 * pos2d.w;
+  if (pos2d.z < -clip || pos2d.x < -clip || pos2d.x > clip || pos2d.y < -clip || pos2d.y > clip) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+  uvec4 cov = texelFetch(u_texture, ivec2(((uint(index) & 0x3ffu) << 1) | 1u, uint(index) >> 10), 0);
+  vec2 u1 = unpackHalf2x16(cov.x), u2 = unpackHalf2x16(cov.y), u3 = unpackHalf2x16(cov.z);
+  mat3 Vrk = mat3(u1.x, u1.y, u2.x, u1.y, u2.y, u3.x, u2.x, u3.x, u3.y);
+  mat3 J = mat3(focal.x / cam.z, 0., -(focal.x * cam.x) / (cam.z * cam.z),
+                0., -focal.y / cam.z, (focal.y * cam.y) / (cam.z * cam.z),
+                0., 0., 0.);
+  mat3 T = transpose(mat3(view)) * J;
+  mat3 cov2d = transpose(T) * Vrk * T;
+  float mid = (cov2d[0][0] + cov2d[1][1]) / 2.0;
+  float radius = length(vec2((cov2d[0][0] - cov2d[1][1]) / 2.0, cov2d[0][1]));
+  float lambda1 = mid + radius, lambda2 = mid - radius;
+  if (lambda2 < 0.0) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+  vec2 diag = normalize(vec2(cov2d[0][1], lambda1 - cov2d[0][0]));
+  vec2 majorAxis = min(sqrt(2.0 * lambda1), 1024.0) * diag;
+  vec2 minorAxis = min(sqrt(2.0 * lambda2), 1024.0) * vec2(diag.y, -diag.x);
+  vColor = clamp(pos2d.z / pos2d.w + 1.0, 0.0, 1.0) * vec4((cov.w) & 0xffu, (cov.w >> 8) & 0xffu, (cov.w >> 16) & 0xffu, (cov.w >> 24) & 0xffu) / 255.0;
+  vPosition = position;
+  vec2 c = vec2(pos2d) / pos2d.w;
+  gl_Position = vec4(c + position.x * majorAxis / viewport + position.y * minorAxis / viewport, 0.0, 1.0);
+}`;
+const FS = `#version 300 es
+precision highp float;
+in vec4 vColor; in vec2 vPosition; out vec4 fragColor;
+void main () {
+  float A = -dot(vPosition, vPosition);
+  if (A < -4.0) discard;
+  float B = exp(A) * vColor.a;
+  fragColor = vec4(B * vColor.rgb, B);
+}`;
+
+let prog, uProj, uView, uFocal, uViewport, texture, indexBuffer;
+function initGL() {
+  const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  prog = gl.createProgram();
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  gl.disable(gl.DEPTH_TEST); gl.enable(gl.BLEND);
+  gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA, gl.ONE, gl.ONE_MINUS_DST_ALPHA, gl.ONE);
+  gl.blendEquationSeparate(gl.FUNC_ADD, gl.FUNC_ADD);
+  uProj = gl.getUniformLocation(prog, "projection"); uView = gl.getUniformLocation(prog, "view");
+  uFocal = gl.getUniformLocation(prog, "focal"); uViewport = gl.getUniformLocation(prog, "viewport");
+  const quad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-2, -2, 2, -2, 2, 2, -2, 2]), gl.STATIC_DRAW);
+  const aPos = gl.getAttribLocation(prog, "position"); gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+  texture = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, texture);
+  for (const p of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, p, gl.CLAMP_TO_EDGE);
+  for (const p of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, p, gl.NEAREST);
+  gl.uniform1i(gl.getUniformLocation(prog, "u_texture"), 0);
+  indexBuffer = gl.createBuffer();
+  const aIdx = gl.getAttribLocation(prog, "index"); gl.enableVertexAttribArray(aIdx);
+  gl.bindBuffer(gl.ARRAY_BUFFER, indexBuffer);
+  gl.vertexAttribIPointer(aIdx, 1, gl.INT, 0, 0);
+  gl.vertexAttribDivisor(aIdx, 1);
+}
+
+/* ---------- sorting worker ---------- */
+let worker = null, dataId = 0, instanceCount = 0, packedPos = null;
+try {
+  const src = sortSplats.toString() + "\n(" + workerMain.toString() + ")();";
+  worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+  worker.onmessage = (e) => { if (e.data.id === dataId) applyIndex(e.data.index); };
+} catch (err) { worker = null; }
+let fallbackLast = null;
+function requestSort(view) {
+  if (!packedPos) return;
+  if (worker) { worker.postMessage({ view: new Float32Array(view) }); return; }
+  if (fallbackLast && Math.abs(fallbackLast[0] - view[2]) < 0.01 && Math.abs(fallbackLast[1] - view[6]) < 0.01 && Math.abs(fallbackLast[2] - view[10]) < 0.01) return;
+  fallbackLast = [view[2], view[6], view[10]];
+  applyIndex(sortSplats(packedPos, packedPos.length / 3, view));
+}
+function applyIndex(idx) {
+  gl.bindBuffer(gl.ARRAY_BUFFER, indexBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, idx, gl.DYNAMIC_DRAW);
+  instanceCount = idx.length; dirty = true;
+}
+
+/* ---------- camera ---------- */
+const cam = { target: [0, 0, 0], yaw: 0, pitch: 0.4, dist: 3 };
+let scene = { center: [0, 0, 0], extent: 1 }, dirty = true, flipped = false, current = null, baseFlip = false;
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+function basis() {
+  const cp = Math.cos(cam.pitch);
+  const dir = [cp * Math.sin(cam.yaw), -Math.sin(cam.pitch), -cp * Math.cos(cam.yaw)];
+  const c = [cam.target[0] + dir[0] * cam.dist, cam.target[1] + dir[1] * cam.dist, cam.target[2] + dir[2] * cam.dist];
+  const f = [-dir[0], -dir[1], -dir[2]];
+  const r = norm(cross([0, 1, 0], f)), d = cross(f, r);
+  return { c, f, r, d };
+}
+function viewMatrix() {
+  const { c, f, r, d } = basis();
+  return [r[0], d[0], f[0], 0, r[1], d[1], f[1], 0, r[2], d[2], f[2], 0, -dot(r, c), -dot(d, c), -dot(f, c), 1];
+}
+const isInside = () => cam.dist < scene.extent * 0.15;
+function setView(mode) {
+  cam.target = scene.center.slice();
+  if (mode === "inside") { cam.dist = scene.extent * 0.02; cam.pitch = 0.05; }
+  else { cam.dist = scene.extent * 1.25; cam.pitch = 0.45; }
+  cam.yaw = 0;
+  document.getElementById("inside").setAttribute("aria-pressed", String(mode === "inside"));
+  document.getElementById("outside").setAttribute("aria-pressed", String(mode !== "inside"));
+  dirty = true;
+}
+function syncModeButtons() {
+  const ins = isInside();
+  document.getElementById("inside").setAttribute("aria-pressed", String(ins));
+  document.getElementById("outside").setAttribute("aria-pressed", String(!ins));
+}
+
+/* ---------- loading ---------- */
+function useData(d, info) {
+  current = d; baseFlip = !!d.rub;
+  repack();
+  if (!info.keepView) setView(info.view || "outside"); else dirty = true;
+  document.getElementById("name").innerHTML = "";
+  const b = document.createElement("b"); b.textContent = info.name; document.getElementById("name").appendChild(b);
+  document.getElementById("count").textContent = d.n.toLocaleString("ja-JP");
+  document.getElementById("fmt").textContent = info.fmt;
+  document.getElementById("sampleTag").hidden = !info.sample;
+}
+function repack() {
+  const p = pack(current, baseFlip !== flipped);
+  packedPos = p.pos; scene = measure(p.pos, current.n);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32UI, p.texW, p.texH, 0, gl.RGBA_INTEGER, gl.UNSIGNED_INT, p.tex);
+  dataId++; instanceCount = 0; fallbackLast = null;
+  if (worker) worker.postMessage({ pos: p.pos, id: dataId });
+  lastSortKey = ""; dirty = true;
+}
+async function loadFile(file) {
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  if (!["spz", "ply", "splat"].includes(ext)) { showStatus("対応しているのは .spz / .ply / .splat です。", true); return; }
+  showStatus("読み込み中… " + file.name);
+  await new Promise(r => setTimeout(r, 30));
+  try {
+    const buf = await file.arrayBuffer();
+    showStatus("展開・変換中…");
+    await new Promise(r => setTimeout(r, 30));
+    const d = ext === "spz" ? await parseSPZ(buf) : ext === "ply" ? parsePLY(buf) : parseSplat(buf);
+    if (!d.n) throw new Error("ファイルに点が含まれていません。");
+    flipped = false; document.getElementById("flip").setAttribute("aria-pressed", "false");
+    useData(d, { name: file.name, fmt: ext.toUpperCase(), sample: false });
+    showStatus("");
+  } catch (err) {
+    console.error(err);
+    showStatus(err.message || "読み込みに失敗しました。", true);
+  }
+}
+
+/* ---------- render loop ---------- */
+let lastSortKey = "";
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(canvas.clientWidth * dpr)), h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; dirty = true; }
+}
+const keys = new Set();
+let lastT = performance.now();
+function frame(t) {
+  const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
+  if (keys.size) {
+    const { f, r } = basis(), h = norm([f[0], 0, f[2]]), sp = scene.extent * 0.45 * dt * (keys.has("shift") ? 3 : 1);
+    const mv = [0, 0, 0];
+    if (keys.has("w") || keys.has("arrowup")) { mv[0] += h[0]; mv[2] += h[2]; }
+    if (keys.has("s") || keys.has("arrowdown")) { mv[0] -= h[0]; mv[2] -= h[2]; }
+    if (keys.has("d") || keys.has("arrowright")) { mv[0] += r[0]; mv[2] += r[2]; }
+    if (keys.has("a") || keys.has("arrowleft")) { mv[0] -= r[0]; mv[2] -= r[2]; }
+    if (keys.has("q")) mv[1] -= 1;
+    if (keys.has("e")) mv[1] += 1;
+    if (mv[0] || mv[1] || mv[2]) { for (let k = 0; k < 3; k++) cam.target[k] += mv[k] * sp; dirty = true; }
+  }
+  tourStep(dt);
+  resize();
+  if (dirty) {
+    dirty = false;
+    const W = canvas.width, H = canvas.height, fy = H / (2 * Math.tan(FOV / 2)), fx = fy;
+    const zn = Math.max(0.005, scene.extent * 0.002), zf = scene.extent * 30;
+    const proj = [2 * fx / W, 0, 0, 0, 0, -2 * fy / H, 0, 0, 0, 0, zf / (zf - zn), 1, 0, 0, -(zf * zn) / (zf - zn), 0];
+    const view = viewMatrix();
+    requestSort(view);
+    gl.viewport(0, 0, W, H);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+    if (instanceCount) {
+      gl.useProgram(prog);
+      gl.uniformMatrix4fv(uProj, false, proj); gl.uniformMatrix4fv(uView, false, view);
+      gl.uniform2fv(uFocal, [fx, fy]); gl.uniform2fv(uViewport, [W, H]);
+      gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, instanceCount);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---------- input ---------- */
+const pointers = new Map();
+let pinch = null;
+function rotateBy(dx, dy) {
+  const s = isInside() ? -1 : 1, k = 0.005;
+  cam.yaw -= s * dx * k;
+  cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch + s * dy * k));
+  dirty = true;
+}
+function panBy(dx, dy) {
+  const { r, d } = basis();
+  const s = Math.max(cam.dist, scene.extent * 0.1) * 2 * Math.tan(FOV / 2) / Math.max(1, canvas.clientHeight);
+  for (let k = 0; k < 3; k++) cam.target[k] -= (r[k] * dx + d[k] * dy) * s;
+  dirty = true;
+}
+function zoomBy(factor) {
+  const minD = scene.extent * 0.02;
+  if (factor < 1 && cam.dist <= minD * 1.001) {
+    const { f } = basis(), step = scene.extent * 0.08 * (1 - factor) * 4;
+    for (let k = 0; k < 3; k++) cam.target[k] += f[k] * step;
+  } else if (factor > 1 && cam.dist <= minD * 1.001 && isInside()) {
+    const { f } = basis(), step = scene.extent * 0.08 * (factor - 1) * 4;
+    for (let k = 0; k < 3; k++) cam.target[k] -= f[k] * step;
+  } else cam.dist = Math.max(minD, Math.min(scene.extent * 8, cam.dist * factor));
+  syncModeButtons(); dirty = true;
+}
+canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+canvas.addEventListener("pointerdown", (e) => {
+  stopTour();
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, pan: e.button === 1 || e.button === 2 || e.shiftKey });
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+  }
+});
+canvas.addEventListener("pointermove", (e) => {
+  const p = pointers.get(e.pointerId); if (!p) return;
+  const dx = e.clientX - p.x, dy = e.clientY - p.y;
+  p.x = e.clientX; p.y = e.clientY;
+  if (pointers.size === 1) { if (p.pan) panBy(dx, dy); else rotateBy(dx, dy); }
+  else if (pointers.size === 2 && pinch) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    if (d > 0 && pinch.d > 0) zoomBy(pinch.d / d);
+    panBy(mx - pinch.mx, my - pinch.my);
+    pinch = { d, mx, my };
+  }
+});
+const endPointer = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2) pinch = null; };
+canvas.addEventListener("pointerup", endPointer);
+canvas.addEventListener("pointercancel", endPointer);
+canvas.addEventListener("wheel", (e) => { e.preventDefault(); stopTour(); zoomBy(Math.exp(Math.max(-60, Math.min(60, e.deltaY)) * 0.004)); }, { passive: false });
+window.addEventListener("keydown", (e) => {
+  if (e.target.closest && e.target.closest("input, textarea")) return;
+  const k = e.key.toLowerCase();
+  if (["w", "a", "s", "d", "q", "e", "arrowup", "arrowdown", "arrowleft", "arrowright", "shift"].includes(k)) { stopTour(); keys.add(k); if (k.startsWith("arrow")) e.preventDefault(); }
+});
+window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
+window.addEventListener("blur", () => keys.clear());
+
+document.getElementById("file").addEventListener("change", (e) => { const f = e.target.files[0]; if (f) loadFile(f); e.target.value = ""; });
+document.getElementById("inside").addEventListener("click", () => { stopTour(); setView("inside"); });
+document.getElementById("outside").addEventListener("click", () => { stopTour(); setView("outside"); });
+document.getElementById("reset").addEventListener("click", () => { stopTour(); setView(isInside() ? "inside" : "outside"); });
+document.getElementById("flip").addEventListener("click", (e) => {
+  if (!current) return;
+  stopTour();
+  const mode = isInside() ? "inside" : "outside";
+  flipped = !flipped; e.currentTarget.setAttribute("aria-pressed", String(flipped));
+  repack(); setView(mode); setTourButton();
+});
+document.getElementById("closeHelp").addEventListener("click", () => { document.getElementById("help").hidden = true; });
+
+const stage = document.getElementById("stage"), drop = document.getElementById("drop");
+let dragDepth = 0;
+stage.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; drop.hidden = false; });
+stage.addEventListener("dragover", (e) => { e.preventDefault(); });
+stage.addEventListener("dragleave", () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) drop.hidden = true; });
+stage.addEventListener("drop", (e) => {
+  e.preventDefault(); dragDepth = 0; drop.hidden = true;
+  const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) loadFile(f);
+});
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", (e) => e.preventDefault());
+
+/* ---------- camera tour (room frame: x right, y up, metres) ---------- */
+const TOUR_KEYS = [
+  { eye: [-1.30, -0.30, -1.75], look: [-0.55, -0.65, 4.50], dur: 8 },  // 入口からカウンターを奥まで
+  { eye: [-1.35, -0.38, 0.20], look: [1.20, -0.45, 1.60], dur: 6 },    // 進みながらバック棚へ
+  { eye: [-1.25, -0.45, 1.40], look: [1.20, -0.30, 1.40], dur: 7 },    // カウンター席からの眺め
+  { eye: [-1.25, -0.45, 2.90], look: [1.20, -0.35, 3.30], dur: 6 },    // 棚に沿って横移動
+  { eye: [-1.40, -0.35, 3.90], look: [-0.40, 0.45, 1.20], dur: 5 },    // 天井のランプを見上げる
+  { eye: [-1.20, -0.30, 4.45], look: [-0.60, -0.75, -2.00], dur: 8 },  // 奥から入口側を振り返る
+  { eye: [-1.25, -0.30, 1.00], look: [-0.60, -0.70, -2.20], dur: 8 },  // 入口へ戻る
+];
+const tour = { playing: false, time: 0, blend: 1, from: null };
+const tourKeysView = (() => {
+  const n = TOUR_KEYS.length;
+  const eyes = TOUR_KEYS.map(k => [k.eye[0], -k.eye[1], -k.eye[2]]);
+  const ang = TOUR_KEYS.map(k => {
+    const f = norm([k.look[0] - k.eye[0], -(k.look[1] - k.eye[1]), -(k.look[2] - k.eye[2])]);
+    return [Math.atan2(-f[0], f[2]), Math.asin(Math.max(-1, Math.min(1, f[1])))];
+  });
+  const wrap = (a) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
+  for (let i = 1; i < n; i++) ang[i][0] = ang[i - 1][0] + wrap(ang[i][0] - ang[i - 1][0]);
+  const loopYaw = ang[n - 1][0] + wrap(ang[0][0] - ang[n - 1][0]) - ang[0][0];
+  const starts = []; let acc = 0; for (const k of TOUR_KEYS) { starts.push(acc); acc += k.dur; }
+  return { n, eyes, ang, loopYaw, starts, total: acc };
+})();
+function catmull(p0, p1, p2, p3, t) {
+  const t2 = t * t, t3 = t2 * t;
+  return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+}
+function tourPose(sec) {
+  const K = tourKeysView, T = ((sec % K.total) + K.total) % K.total;
+  let i = K.n - 1; while (K.starts[i] > T) i--;
+  const t = (T - K.starts[i]) / TOUR_KEYS[i].dur;
+  const at = (j) => { const m = ((j % K.n) + K.n) % K.n, lap = Math.floor(j / K.n);
+    return { e: K.eyes[m], yaw: K.ang[m][0] + lap * K.loopYaw, pitch: K.ang[m][1] }; };
+  const a = at(i - 1), b = at(i), c = at(i + 1), d = at(i + 2);
+  const eye = [0, 1, 2].map(x => catmull(a.e[x], b.e[x], c.e[x], d.e[x], t));
+  return { eye, yaw: catmull(a.yaw, b.yaw, c.yaw, d.yaw, t), pitch: catmull(a.pitch, b.pitch, c.pitch, d.pitch, t) };
+}
+function fwdFrom(yaw, pitch) { const cp = Math.cos(pitch); return [-cp * Math.sin(yaw), Math.sin(pitch), cp * Math.cos(yaw)]; }
+function placeCamera(eye, f) {
+  const D = 0.05; f = norm(f);
+  cam.target = [eye[0] + f[0] * D, eye[1] + f[1] * D, eye[2] + f[2] * D];
+  cam.dist = D; cam.pitch = Math.asin(Math.max(-1, Math.min(1, f[1]))); cam.yaw = Math.atan2(-f[0], f[2]);
+  dirty = true;
+}
+function tourStep(dt) {
+  if (!tour.playing) return;
+  tour.time += dt;
+  const p = tourPose(tour.time); let eye = p.eye, f = fwdFrom(p.yaw, p.pitch);
+  if (tour.blend < 1) {
+    tour.blend = Math.min(1, tour.blend + dt / 1.6);
+    const w = tour.blend * tour.blend * (3 - 2 * tour.blend);
+    eye = eye.map((v, k) => tour.from.eye[k] + (v - tour.from.eye[k]) * w);
+    f = f.map((v, k) => tour.from.f[k] + (v - tour.from.f[k]) * w);
+  }
+  placeCamera(eye, f);
+}
+function setTourButton() {
+  const b = document.getElementById("tourBtn");
+  b.setAttribute("aria-pressed", String(tour.playing));
+  b.textContent = tour.playing ? "カメラワーク停止" : "カメラワーク再生";
+  b.disabled = !(shown && VERSIONS[shown].aligned && !flipped);
+}
+function startTour(immediate) {
+  if (!shown || !VERSIONS[shown].aligned || flipped) return;
+  const { c, f } = basis();
+  tour.from = { eye: c, f: [-f[0], -f[1], -f[2]].map(v => -v) };
+  tour.blend = immediate ? 1 : 0; tour.playing = true;
+  setTourButton(); syncModeButtons();
+}
+function stopTour() { if (!tour.playing) return; tour.playing = false; setTourButton(); syncModeButtons(); }
+const autoTour = location.hash !== "#free" && !(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
+document.getElementById("tourBtn").addEventListener("click", () => { tour.playing ? stopTour() : startTour(false); });
+
+/* ---------- bundled scan ---------- */
+const VERSIONS = {
+  orig: { file: "scene_orig.b64.txt", name: "店内3Dスキャン", aligned: true },
+};
+const cache = {};
+let shown = null, firstLoad = true;
+async function fetchVersion(key) {
+  if (cache[key]) return cache[key];
+  const res = await fetch(VERSIONS[key].file);
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const total = +res.headers.get("content-length") || 0;
+  let buf;
+  if (res.body && total) {
+    const reader = res.body.getReader(), parts = []; let got = 0;
+    for (;;) {
+      const { done, value } = await reader.read(); if (done) break;
+      parts.push(value); got += value.length;
+      showStatus("スキャンデータを読み込み中… " + Math.min(100, Math.round(got / total * 100)) + "%");
+    }
+    const all = new Uint8Array(got); let o = 0; for (const p of parts) { all.set(p, o); o += p.length; }
+    buf = all.buffer;
+  } else buf = await res.arrayBuffer();
+  showStatus("3Dデータを展開中…");
+  await new Promise(r => setTimeout(r, 30));
+  const bin = atob(new TextDecoder().decode(buf).trim());
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return (cache[key] = await parseSPZ(bytes.buffer));
+}
+async function showVersion(key) {
+  if (key === shown) return;
+  document.getElementById("vOrig").setAttribute("aria-pressed", String(key === "orig"));
+  document.getElementById("vPhoto").setAttribute("aria-pressed", String(key === "photo"));
+  document.getElementById("vRaw").setAttribute("aria-pressed", String(key === "raw"));
+  showStatus("スキャンデータを読み込み中…");
+  try {
+    const d = await fetchVersion(key);
+    const keep = !firstLoad && VERSIONS[key].aligned === VERSIONS[shown].aligned, saved = keep ? { t: cam.target.slice(), yaw: cam.yaw, pitch: cam.pitch, dist: cam.dist } : null;
+    useData(d, { name: VERSIONS[key].name, fmt: "SPZ", sample: false, view: "inside", keepView: keep });
+    if (saved) { cam.target = saved.t; cam.yaw = saved.yaw; cam.pitch = saved.pitch; cam.dist = saved.dist; syncModeButtons(); dirty = true; }
+    const wasFirst = firstLoad;
+    shown = key; firstLoad = false;
+    if (!VERSIONS[key].aligned) stopTour(); else if (wasFirst && autoTour) startTour(true);
+    setTourButton();
+    showStatus("");
+  } catch (err) {
+    console.error(err);
+    if (firstLoad) useData(makeSample(), { name: "サンプルの部屋", fmt: "生成データ", sample: true });
+    showStatus("スキャンデータを読み込めませんでした。ページを再読み込みしてください。", true);
+  }
+}
+function loadBundled() { showVersion("orig"); }
+document.getElementById("vOrig").addEventListener("click", () => showVersion("orig"));
+
+
+
+/* ---------- start ---------- */
+if (!gl) {
+  showStatus("このブラウザはWebGL2に対応していないため表示できません。最新のChromeやEdgeで開いてください。", true);
+} else {
+  try {
+    initGL();
+    requestAnimationFrame(frame);
+    loadBundled();
+  } catch (err) {
+    console.error(err);
+    showStatus("表示の初期化に失敗しました: " + err.message, true);
+  }
+}
+</script>
+
+</body>
+</html>
