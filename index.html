@@ -198,6 +198,15 @@ canvas:active { cursor: grabbing; }
 .hint.fade { opacity: 0; }
 
 /* visitors' book button, under the shop button */
+.musicbtn { top: calc(176px + env(safe-area-inset-top, 0px)); }
+.musicbtn .disc svg { width: 26px; height: 26px; fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.musicbtn .disc svg .nh { fill: var(--ink); stroke: none; }
+.musicbtn .disc svg .slash { stroke: var(--ink); opacity: .9; }
+.musicbtn[aria-pressed="true"] .disc { border-color: var(--lamp); box-shadow: 0 0 0 3px rgba(0,0,0,.35), 0 0 14px rgba(255,190,110,.45); }
+.musicbtn[aria-pressed="true"] .disc svg .slash { display: none; }
+.musicbtn[aria-pressed="true"] .disc svg { animation: bob 1.6s ease-in-out infinite; }
+@keyframes bob { 0%,100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-2px) rotate(-6deg); } }
+@media (prefers-reduced-motion: reduce) { .musicbtn[aria-pressed="true"] .disc svg { animation: none; } }
 .bookbtn { top: calc(96px + env(safe-area-inset-top, 0px)); }
 .bookbtn .disc svg { width: 26px; height: 26px; fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
@@ -321,6 +330,10 @@ canvas:active { cursor: grabbing; }
 
     <button class="shopbtn bookbtn" id="bookBtn" type="button" aria-haspopup="dialog">
       <span class="disc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5 H16.5 A2 2 0 0 1 18.5 6.5 V19.5 H7 A2 2 0 0 1 5 17.5 Z"/><path d="M5 17.5 A2 2 0 0 1 7 15.5 H18.5"/><path d="M9 8.5 H14.5 M9 11.5 H13"/></svg></span><span class="lbl">来店帳</span>
+    </button>
+
+    <button class="shopbtn musicbtn" id="musicBtn" type="button" aria-pressed="false" aria-label="音楽を流す">
+      <span class="disc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17.5 V6 L18 4.5 V15.5"/><ellipse class="nh" cx="8" cy="17.5" rx="2.6" ry="2"/><ellipse class="nh" cx="16" cy="15.5" rx="2.6" ry="2"/><path class="slash" d="M4.5 4.5 L19.5 19.5"/></svg></span><span class="lbl">音楽</span>
     </button>
 
     <div class="sheet" id="bookSheet" role="dialog" aria-modal="true" aria-labelledby="bookTitle" hidden>
@@ -1203,6 +1216,21 @@ function playMeow() {
     const p = a.play(); if (p && p.catch) p.catch(() => {});
   } catch (e) {}
 }
+// BGM: tap to play / stop (browsers block autoplay with sound)
+const BGM_SRC = "bgm.mp3";
+let bgm = null, bgmOn = false;
+function setBgm(on) {
+  const b = $("musicBtn");
+  if (on) {
+    if (!bgm) { bgm = new Audio(BGM_SRC); bgm.loop = true; bgm.preload = "auto"; bgm.volume = 0.45; }
+    const p = bgm.play();
+    if (p && p.catch) p.catch(() => { bgmOn = false; b.setAttribute("aria-pressed", "false"); b.setAttribute("aria-label", "音楽を流す"); });
+  } else if (bgm) bgm.pause();
+  bgmOn = on;
+  b.setAttribute("aria-pressed", String(on)); b.setAttribute("aria-label", on ? "音楽を止める" : "音楽を流す");
+}
+$("musicBtn").addEventListener("click", () => setBgm(!bgmOn));
+document.addEventListener("visibilitychange", () => { if (!bgm || !bgmOn) return; if (document.hidden) bgm.pause(); else { const p = bgm.play(); if (p && p.catch) p.catch(() => {}); } });
 $("walker").addEventListener("click", () => {
   playMeow();
   const w = $("walker"), say = $("say"), lane = $("lane");
