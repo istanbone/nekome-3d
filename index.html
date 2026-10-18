@@ -197,6 +197,43 @@ canvas:active { cursor: grabbing; }
 .toast { top: 42%; }
 .hint.fade { opacity: 0; }
 
+/* visitors' book button, under the shop button */
+.bookbtn { top: calc(96px + env(safe-area-inset-top, 0px)); }
+.bookbtn .disc svg { width: 26px; height: 26px; fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* visitors' book: a ruled ledger on paper */
+.ledger { position: relative; width: min(520px, calc(100% - 24px)); max-height: calc(100% - 40px); display: flex; flex-direction: column;
+  background: var(--paper); color: #1a1410; border-radius: 6px; box-shadow: 0 18px 50px rgba(0,0,0,.6); overflow: hidden; }
+.ledger header { padding: 18px 20px 10px; border-bottom: 2px solid #1a1410; }
+.ledger h2 { margin: 0; font-family: var(--font-wa); font-weight: 600; font-size: 22px; letter-spacing: .3em; }
+.ledger .sub { margin: 4px 0 0; font-size: 12px; color: #5a4a3c; }
+.ledger form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; padding: 14px 20px; border-bottom: 1px dashed #b9a98f; }
+.ledger label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: #5a4a3c; min-width: 0; }
+.ledger .full { grid-column: 1 / -1; }
+.ledger input, .ledger select { font: inherit; font-size: 15px; color: #1a1410; background: #fbf6ea; border: 1px solid #b9a98f; border-radius: 6px; padding: 8px 10px; min-width: 0; }
+.ledger input:focus-visible, .ledger select:focus-visible { outline: 2px solid #1a1410; outline-offset: 1px; }
+.ledger .shops { display: flex; gap: 14px; font-size: 14px; font-weight: 500; color: #1a1410; padding-top: 4px; }
+.ledger .shops label { flex-direction: row; align-items: center; gap: 6px; font-size: 14px; color: #1a1410; font-weight: 500; }
+.ledger .row-btn { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; }
+.ledger .sign-btn { font: inherit; font-size: 15px; font-weight: 700; padding: 9px 22px; border-radius: 999px; border: 0; background: #1a1410; color: var(--paper); cursor: pointer; }
+.ledger .sign-btn:disabled { opacity: .5; cursor: default; }
+.ledger .sign-btn:focus-visible { outline: 2px solid #1a1410; outline-offset: 2px; }
+.ledger .msg { font-size: 12px; color: #5a4a3c; }
+.ledger .msg.err { color: var(--ink-red); }
+.ledger .list { overflow-y: auto; padding: 4px 20px 18px; -webkit-overflow-scrolling: touch; }
+.ledger .count { font-size: 12px; color: #5a4a3c; margin: 10px 0 2px; }
+.ledger ol { list-style: none; margin: 0; padding: 0; }
+.ledger li { display: grid; grid-template-columns: 6.6em 1fr; gap: 2px 10px; padding: 9px 0; border-bottom: 1px solid #d9cdb6; font-size: 14px; line-height: 1.5; }
+.ledger li .when { font-family: var(--font-wa); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ledger li .shop { font-size: 11px; color: #7a6a58; display: block; font-family: var(--font-ui); font-weight: 500; }
+.ledger li .who { font-weight: 700; overflow-wrap: anywhere; }
+.ledger li .word { color: #5a4a3c; font-size: 13px; }
+.ledger li.mine { background: rgba(176, 18, 24, .06); }
+.ledger .empty { padding: 18px 0; font-size: 13px; color: #5a4a3c; text-align: center; }
+.ledger .close { position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; border: 0; background: none; font-size: 22px; color: #5a4a3c; cursor: pointer; border-radius: 50%; }
+.ledger .close:focus-visible { outline: 2px solid #1a1410; }
+@media (max-width: 380px) { .ledger form { grid-template-columns: 1fr; } }
+
 /* shop card */
 .sheet { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; background: rgba(8, 6, 5, .72);
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
@@ -280,6 +317,42 @@ canvas:active { cursor: grabbing; }
     <button class="shopbtn" id="shopBtn" type="button" aria-haspopup="dialog">
       <span class="disc"><span class="face" aria-hidden="true"></span></span><span class="lbl">お店</span>
     </button>
+
+    <button class="shopbtn bookbtn" id="bookBtn" type="button" aria-haspopup="dialog">
+      <span class="disc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5 H16.5 A2 2 0 0 1 18.5 6.5 V19.5 H7 A2 2 0 0 1 5 17.5 Z"/><path d="M5 17.5 A2 2 0 0 1 7 15.5 H18.5"/><path d="M9 8.5 H14.5 M9 11.5 H13"/></svg></span><span class="lbl">来店帳</span>
+    </button>
+
+    <div class="sheet" id="bookSheet" role="dialog" aria-modal="true" aria-labelledby="bookTitle" hidden>
+      <div class="ledger">
+        <button class="close" id="bookClose" type="button" aria-label="閉じる">×</button>
+        <header>
+          <h2 id="bookTitle">来店帳</h2>
+          <p class="sub">猫目に来た日を、ひとこと添えて記しておきましょう。</p>
+        </header>
+        <form id="bookForm" novalidate>
+          <label class="full" for="bkName">お名前（ニックネーム可・12文字まで）
+            <input id="bkName" type="text" maxlength="12" autocomplete="nickname" placeholder="例：ねこやま" required>
+          </label>
+          <label for="bkYear">はじめて来た年<select id="bkYear"></select></label>
+          <label for="bkMonth">月<select id="bkMonth"></select></label>
+          <div class="full"><span class="msg" style="font-weight:700">お店</span>
+            <div class="shops" role="radiogroup" aria-label="お店">
+              <label for="bkShop0"><input type="radio" name="bkShop" id="bkShop0" value="0" checked>新宿五丁目</label>
+              <label for="bkShop1"><input type="radio" name="bkShop" id="bkShop1" value="1">荒木町</label>
+            </div>
+          </div>
+          <label class="full" for="bkWord">ひとこと<select id="bkWord"></select></label>
+          <div class="row-btn">
+            <button class="sign-btn" id="bkSubmit" type="submit">記帳する</button>
+            <span class="msg" id="bkMsg" aria-live="polite"></span>
+          </div>
+        </form>
+        <div class="list">
+          <p class="count" id="bkCount"></p>
+          <ol id="bkList"></ol>
+        </div>
+      </div>
+    </div>
 
     <div class="hint" id="hint" hidden></div>
     <div class="toast" id="toast" hidden></div>
@@ -1137,6 +1210,87 @@ $("walker").addEventListener("click", () => {
   clearTimeout(sayTimer);
   sayTimer = setTimeout(() => { say.classList.remove("on"); w.classList.remove("paused"); }, 1800);
 });
+/* visitors' book (Firestore REST; fixed-format entries only, enforced by security rules) */
+const FB = { key: "AIzaSyC3LhDx-IO-bchWNipXL9UsiZR1MyBRjH8", project: "nekome-20th" };
+const FS_BASE = "https://firestore.googleapis.com/v1/projects/" + FB.project + "/databases/(default)/documents";
+const SHOPS = ["新宿五丁目", "荒木町"];
+const WORDS = ["はじめて来ました", "また来ました", "常連です", "いつもの一杯", "二十周年おめでとう", "終電を逃しました", "猫に会いに", "ここだけの話をしに"];
+const NG = ["死ね", "しね", "殺す", "ころす", "馬鹿", "ばか", "バカ", "くそ", "クソ", "糞", "アホ", "あほ", "きもい", "キモい", "キモイ", "ブス", "ぶす", "うざい", "ウザい", "カス", "ゴミ", "fuck", "shit", "sex", "http", "www", ".com", ".jp"];
+const now = new Date();
+(function fillSelects() {
+  const y = $("bkYear"), m = $("bkMonth"), w = $("bkWord");
+  for (let yr = now.getFullYear(); yr >= 2006; yr--) y.add(new Option(yr + "年", yr));
+  for (let mo = 1; mo <= 12; mo++) m.add(new Option(mo + "月", mo));
+  m.value = String(now.getMonth() + 1);
+  WORDS.forEach((t, i) => w.add(new Option(t, i)));
+})();
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+function esc(t) { const d = document.createElement("span"); d.textContent = t; return d.innerHTML; }
+async function loadBook() {
+  const list = $("bkList"), count = $("bkCount");
+  count.textContent = "読み込み中…";
+  try {
+    const res = await fetch(FS_BASE + "/visits?pageSize=300&orderBy=createdAt%20desc&key=" + FB.key);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    const docs = (data.documents || []).map(d => ({
+      id: d.name.split("/").pop(),
+      name: d.fields.name.stringValue, year: +d.fields.year.integerValue, month: +d.fields.month.integerValue,
+      shop: +d.fields.shop.integerValue, word: +d.fields.word.integerValue,
+    }));
+    const mine = (lsGet("nekome-mine") || "").split(",");
+    list.innerHTML = docs.length ? docs.map(d =>
+      '<li class="' + (mine.includes(d.id) ? "mine" : "") + '"><span class="when">' + d.year + "年" + d.month + "月" +
+      '<span class="shop">' + esc(SHOPS[d.shop] || "") + '</span></span><span><span class="who">' + esc(d.name) +
+      '</span><br><span class="word">' + esc(WORDS[d.word] || "") + "</span></span></li>").join("")
+      : '<li class="empty" style="display:block">まだ記帳はありません。最初のひとりになりませんか。</li>';
+    count.textContent = docs.length ? "これまでの記帳 " + docs.length + " 件" : "";
+  } catch (e) {
+    count.textContent = "";
+    list.innerHTML = '<li class="empty" style="display:block">来店帳を読み込めませんでした。通信の良いところで開き直してください。</li>';
+  }
+}
+$("bookForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("bkMsg"), btn = $("bkSubmit");
+  const name = $("bkName").value.trim().replace(/\s+/g, " ");
+  msg.classList.remove("err");
+  if (!name) { msg.textContent = "お名前を入れてください"; msg.classList.add("err"); $("bkName").focus(); return; }
+  const low = name.toLowerCase();
+  if (NG.some(w => low.includes(w.toLowerCase()))) { msg.textContent = "その言葉は来店帳には書けません"; msg.classList.add("err"); return; }
+  const last = +(lsGet("nekome-last") || 0);
+  if (Date.now() - last < 10 * 60 * 1000) { msg.textContent = "記帳は少し時間をあけてからお願いします"; msg.classList.add("err"); return; }
+  const id = Array.from(crypto.getRandomValues(new Uint8Array(10)), b => "abcdefghijklmnopqrstuvwxyz0123456789"[b % 36]).join("");
+  const body = { writes: [{
+    update: { name: "projects/" + FB.project + "/databases/(default)/documents/visits/" + id, fields: {
+      name: { stringValue: name }, year: { integerValue: String(+$("bkYear").value) }, month: { integerValue: String(+$("bkMonth").value) },
+      shop: { integerValue: document.querySelector('input[name="bkShop"]:checked').value }, word: { integerValue: String(+$("bkWord").value) },
+    } },
+    updateTransforms: [{ fieldPath: "createdAt", setToServerValue: "REQUEST_TIME" }],
+    currentDocument: { exists: false },
+  }] };
+  btn.disabled = true; msg.textContent = "記帳しています…";
+  try {
+    const res = await fetch(FS_BASE.replace("/documents", "/documents:commit") + "?key=" + FB.key, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    lsSet("nekome-last", String(Date.now()));
+    lsSet("nekome-mine", ((lsGet("nekome-mine") || "") + "," + id).replace(/^,/, ""));
+    msg.textContent = "記帳しました。ありがとうございます";
+    $("bkName").value = "";
+    playMeow();
+    loadBook();
+  } catch (err) {
+    msg.textContent = "記帳できませんでした。時間をおいてもう一度お試しください"; msg.classList.add("err");
+  } finally { btn.disabled = false; }
+});
+function openBook() { $("bookSheet").hidden = false; $("bookClose").focus(); loadBook(); }
+function closeBook() { $("bookSheet").hidden = true; $("bookBtn").focus(); }
+$("bookBtn").addEventListener("click", openBook);
+$("bookClose").addEventListener("click", closeBook);
+$("bookSheet").addEventListener("click", (e) => { if (e.target === $("bookSheet")) closeBook(); });
+window.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("bookSheet").hidden) closeBook(); });
 $("copyTel").addEventListener("click", () => copyText("03-3350-4304", "番号をコピーしました"));
 
 /* ---------- bundled scan ---------- */
