@@ -207,6 +207,8 @@ canvas:active { cursor: grabbing; }
 .musicbtn[aria-pressed="true"] .disc svg { animation: bob 1.6s ease-in-out infinite; }
 @keyframes bob { 0%,100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-2px) rotate(-6deg); } }
 @media (prefers-reduced-motion: reduce) { .musicbtn[aria-pressed="true"] .disc svg { animation: none; } }
+.sidebtns { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(100% - 64px); display: flex; flex-direction: column; gap: 12px; }
+.sidebtns .shopbtn { position: static; }
 .bookbtn { top: calc(96px + env(safe-area-inset-top, 0px)); }
 .bookbtn .disc svg { width: 26px; height: 26px; fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
@@ -324,17 +326,8 @@ canvas:active { cursor: grabbing; }
       <h1 class="greet"><span class="g1">二十周年</span><span class="g2">おめでとうございます</span></h1>
     </header>
 
-    <button class="shopbtn" id="shopBtn" type="button" aria-haspopup="dialog">
-      <span class="disc"><span class="face" aria-hidden="true"></span></span><span class="lbl">お店</span>
-    </button>
 
-    <button class="shopbtn bookbtn" id="bookBtn" type="button" aria-haspopup="dialog">
-      <span class="disc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5 H16.5 A2 2 0 0 1 18.5 6.5 V19.5 H7 A2 2 0 0 1 5 17.5 Z"/><path d="M5 17.5 A2 2 0 0 1 7 15.5 H18.5"/><path d="M9 8.5 H14.5 M9 11.5 H13"/></svg></span><span class="lbl">来店帳</span>
-    </button>
 
-    <button class="shopbtn musicbtn" id="musicBtn" type="button" aria-pressed="false" aria-label="音楽を流す">
-      <span class="disc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17.5 V6 L18 4.5 V15.5"/><ellipse class="nh" cx="8" cy="17.5" rx="2.6" ry="2"/><ellipse class="nh" cx="16" cy="15.5" rx="2.6" ry="2"/><path class="slash" d="M4.5 4.5 L19.5 19.5"/></svg></span><span class="lbl">音楽</span>
-    </button>
 
     <div class="sheet" id="bookSheet" role="dialog" aria-modal="true" aria-labelledby="bookTitle" hidden>
       <div class="ledger">
@@ -374,6 +367,17 @@ canvas:active { cursor: grabbing; }
     <div class="drop" id="drop" hidden>SPZ / PLY をここにドロップ</div>
 
     <div class="bottom">
+      <div class="sidebtns">
+        <button class="shopbtn musicbtn" id="musicBtn" type="button" aria-pressed="false" aria-label="音楽を流す">
+          <span class="disc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17.5 V6 L18 4.5 V15.5"/><ellipse class="nh" cx="8" cy="17.5" rx="2.6" ry="2"/><ellipse class="nh" cx="16" cy="15.5" rx="2.6" ry="2"/><path class="slash" d="M4.5 4.5 L19.5 19.5"/></svg></span><span class="lbl">音楽</span>
+        </button>
+        <button class="shopbtn bookbtn" id="bookBtn" type="button" aria-haspopup="dialog">
+          <span class="disc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5 H16.5 A2 2 0 0 1 18.5 6.5 V19.5 H7 A2 2 0 0 1 5 17.5 Z"/><path d="M5 17.5 A2 2 0 0 1 7 15.5 H18.5"/><path d="M9 8.5 H14.5 M9 11.5 H13"/></svg></span><span class="lbl">来店帳</span>
+        </button>
+        <button class="shopbtn" id="shopBtn" type="button" aria-haspopup="dialog">
+          <span class="disc"><span class="face" aria-hidden="true"></span></span><span class="lbl">お店</span>
+        </button>
+      </div>
       <div class="lane" id="lane">
         <button class="walker" id="walker" type="button" aria-label="猫をなでる">
           <svg class="wb" viewBox="0 0 80 44" aria-hidden="true">
