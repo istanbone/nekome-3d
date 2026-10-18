@@ -1215,7 +1215,7 @@ $("walker").addEventListener("click", () => {
 const FB = { key: "AIzaSyC3LhDx-IO-bchWNipXL9UsiZR1MyBRjH8", project: "nekome-20th" };
 const FS_BASE = "https://firestore.googleapis.com/v1/projects/" + FB.project + "/databases/(default)/documents";
 const SHOPS = ["新宿五丁目", "荒木町"];
-const WORDS = ["はじめて来ました", "また来ました", "常連です", "いつもの一杯", "二十周年おめでとう", "終電を逃しました", "猫に会いに", "ここだけの話をしに"];
+const WORDS = ["はじめて来ました", "また来ました", "いつもの一杯", "二十周年おめでとう", "終電を逃しました", "猫に会いに"];
 const NG = ["死ね", "しね", "殺す", "ころす", "馬鹿", "ばか", "バカ", "くそ", "クソ", "糞", "アホ", "あほ", "きもい", "キモい", "キモイ", "ブス", "ぶす", "うざい", "ウザい", "カス", "ゴミ", "fuck", "shit", "sex", "http", "www", ".com", ".jp"];
 const now = new Date();
 (function fillSelects() {
@@ -1275,7 +1275,7 @@ $("bookForm").addEventListener("submit", async (e) => {
   try {
     const res = await fetch(FS_BASE.replace("/documents", "/documents:commit") + "?key=" + FB.key, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    if (!res.ok) throw new Error("HTTP " + res.status);
+    if (!res.ok) { const er = new Error("HTTP " + res.status); er.status = res.status; throw er; }
     lsSet("nekome-last", String(Date.now()));
     lsSet("nekome-mine", ((lsGet("nekome-mine") || "") + "," + id).replace(/^,/, ""));
     msg.textContent = "記帳しました。ありがとうございます";
@@ -1283,7 +1283,10 @@ $("bookForm").addEventListener("submit", async (e) => {
     playMeow();
     loadBook();
   } catch (err) {
-    msg.textContent = "記帳できませんでした。時間をおいてもう一度お試しください"; msg.classList.add("err");
+    msg.textContent = err && err.status === 403 ? "記帳できませんでした。お名前に記号やURLが入っていないか確認してください"
+      : err && err.status ? "記帳できませんでした。時間をおいてもう一度お試しください"
+      : "記帳できませんでした。通信を確認するか、ブラウザで " + SHARE_URL.replace(/^https:\/\//, "") + " を開いてお試しください";
+    msg.classList.add("err");
   } finally { btn.disabled = false; }
 });
 function openBook() { $("bookSheet").hidden = false; $("bookClose").focus(); loadBook(); }
