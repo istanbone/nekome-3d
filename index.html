@@ -1203,10 +1203,6 @@ function playMeow() {
     const p = a.play(); if (p && p.catch) p.catch(() => {});
   } catch (e) {}
 }
-    meow.currentTime = 0;
-    const p = meow.play(); if (p && p.catch) p.catch(() => {});
-  } catch (e) {}
-}
 $("walker").addEventListener("click", () => {
   playMeow();
   const w = $("walker"), say = $("say"), lane = $("lane");
